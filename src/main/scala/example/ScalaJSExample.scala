@@ -6,10 +6,11 @@ import org.scalajs.dom.html
 import scala.util.Random
 
 
-class Block(val y: Double, val r: Double, val dx: Double, val center: Int, val renderer: dom.CanvasRenderingContext2D, var x: Int) {
+class Block(val y: Double, val dr: Double, val dx: Double, val center: Int, val renderer: dom.CanvasRenderingContext2D, var x: Int) {
   val width = 5;
   val height = 20;
-  val speed = 2;
+  val speed = 3; // default speed
+  var r = 0.0; // rotation
   //val color = "darkblue";
     def centerCoords(): (Double, Double) = {
       (x+width/2.0, getY()+height/2.0)
@@ -18,8 +19,16 @@ class Block(val y: Double, val r: Double, val dx: Double, val center: Int, val r
     def getY() = center + (y * height)
 
     def draw(frame: Int): Unit = {
-      x -= speed
-      renderer.fillRect(x, getY(), width, height)
+      x -= speed + dx.toInt
+      r += dr
+      renderer.save()
+      renderer.translate( x+width/2, getY()+height/2 );
+      renderer.rotate(r*Math.PI/180);
+      //renderer.fillRect(x, getY(), width, height)
+      renderer.fillRect( -width/2, -height/2, width,height);
+      renderer.restore()
+      //renderer.rotate(0);
+      //renderer.translate(0, 0);
     }
 
     def intersect(c: (Double, Double, Double)): Boolean = {
@@ -33,9 +42,10 @@ class Player(var r: Double, val center: Int, val renderer: dom.CanvasRenderingCo
   val playerCirclesGap = 35;
   val radious = 5.0;
   var dead = 0;
+  var down = false;
+  var up = false;
 
   def move(dr: Double): Unit = {
-
     r += dr * math.Pi / 180
     r %= math.Pi*2
   }
@@ -57,7 +67,11 @@ class Player(var r: Double, val center: Int, val renderer: dom.CanvasRenderingCo
   }
 
   def draw(): Unit = {
-    val (first, second) = coords();
+    if (down ^ up) {
+      if (down) move(-9.0)
+      if (up) move(9.0)
+    }
+    val ((fx, fy), (sx,sy)) = coords();
     renderer.fillStyle = "gray"
     renderer.beginPath();
     renderer.arc(center, center, playerCirclesGap, 0, math.Pi*2, true); 
@@ -66,19 +80,17 @@ class Player(var r: Double, val center: Int, val renderer: dom.CanvasRenderingCo
 
     renderer.fillStyle = "blue"
     renderer.beginPath();
-    renderer.arc(first._1, first._2, radious, 0, math.Pi*2, true); 
+    renderer.arc(fx, fy, radious, 0, math.Pi*2, true); 
     renderer.fill();
     renderer.closePath();
 
     renderer.fillStyle = "red"
     renderer.beginPath();
-    renderer.arc(second._1, second._2, radious, 0, math.Pi*2, true); 
+    renderer.arc(sx, sy, radious, 0, math.Pi*2, true); 
     renderer.fill();
     renderer.closePath();
   }
 }
-
-
 
 
 @JSExport
@@ -91,57 +103,66 @@ object ScalaJSExample {
     canvas.width = canvas.parentElement.clientWidth
     canvas.height = 400
 
-    renderer.font = "50px sans-serif"
-    renderer.textAlign = "center"
-    renderer.textBaseline = "middle"
 
     //variables
     val center = (canvas.height / 2);
     val rightBorder = canvas.width
     val player = new Player(0, center, renderer);
-    val obstacleGap = 200 // Gap between the approaching obstacles
+    var obstacleGap = 100 // Gap between the approaching obstacles
 
     // Whether the player is dead or not;
     // 0 means alive, >0 is number of frames before respawning
     var dead = 0
     // What frame this is; used to keep track
     // of where the obstacles should be positioned
-    var frame = -50
+    var frame = -25
     // List of each obstacle, storing only the Y position of the hole.
     // The X position of the obstacle is calculated by its position in the
     // queue and in the current frame.
-    val obstacles = collection.mutable.Queue.empty[Block]
+    val obstacles = collection.mutable.ArrayBuffer[Block]()
+    var score = 0
 
     def runLive() = {
-      frame += 2
+      frame += 1
+
+      // render score
+      renderer.fillStyle = "black"
+      renderer.font = "20px sans-serif"
+      renderer.fillText(s"Score: $score", 100, 20)
 
       // Create new obstacles, or kill old ones as necessary
+      val deadObstacles = obstacles filter (_.x<=0)
+      score += deadObstacles.length
+      obstacles --= deadObstacles
       if (frame >= 0 && frame % obstacleGap == 0)
-        obstacles.enqueue(
-          new Block(Random.nextInt(5)-2, Random.nextInt(5)-2, Random.nextInt(5)-2, center, renderer, rightBorder)
-          )
-      if (obstacles.length > 9){
-        obstacles.dequeue()
-        frame -= obstacleGap
-      }
+        obstacles += new Block(Random.nextInt(5)-2, Random.nextInt(5)-2, Random.nextInt(5)-2, center, renderer, rightBorder)
+
+      // add some hurtcore
+      if (frame >= 0 && frame % 1000 == 0)
+        obstacleGap -= 1
+      if (obstacleGap == 0)
+        dead = 50
 
       // Render obstacles, and check for collision
       renderer.fillStyle = "darkblue"
       obstacles.foreach(_.draw(frame))
-      val death = obstacles.map(_.intersect(player.fullCoords(1))).contains(true) || 
-        obstacles.map(_.intersect(player.fullCoords(2))).contains(true)
-
-      if (death) dead = 50;
+      if (obstacles.map(_.intersect(player.fullCoords(1))).contains(true) || 
+        obstacles.map(_.intersect(player.fullCoords(2))).contains(true))
+        dead = 50;
 
       // Render player
       player.draw();
     }
 
     def runDead() = {
+      score = 0
       frame = -50
-      obstacles.clear()
+      obstacles.clear
       dead -= 1
       renderer.fillStyle = "darkred"
+      renderer.font = "50px sans-serif"
+      renderer.textAlign = "center"
+      renderer.textBaseline = "middle"
       renderer.fillText("Game Over", canvas.width / 2, canvas.height / 2)
     }
 
@@ -153,14 +174,22 @@ object ScalaJSExample {
 
     dom.window.setInterval(run _, 20)
 
-    dom.window.onkeypress = (e: dom.KeyboardEvent) => {
+    dom.window.onkeydown = (e: dom.KeyboardEvent) => {
       e.keyCode match {
-        case 1094 | 119=>
-          //println("up")
-          player.move(9.0)
-        case 1099 | 115=>
-          //println("down")
-          player.move(-9.0)
+        case 1094 | 119 | 83 | 40 =>
+          player.down = true;
+        case 1099 | 115 | 87 | 38 =>
+          player.up = true;
+        case _ => 
+          println(s"nothing: ${e.keyCode}")
+      }
+    }
+    dom.window.onkeyup = (e: dom.KeyboardEvent) => {
+      e.keyCode match {
+        case 1094 | 119 | 83 | 40 =>
+          player.down = false;
+        case 1099 | 115 | 87 | 38 =>
+          player.up = false;
         case _ => 
           println(s"nothing: ${e.keyCode}")
       }
