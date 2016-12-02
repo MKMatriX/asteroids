@@ -6,6 +6,81 @@ import org.scalajs.dom.html
 import scala.util.Random
 
 
+class Block(val y: Double, val r: Double, val dx: Double, val center: Int, val renderer: dom.CanvasRenderingContext2D, var x: Int) {
+  val width = 5;
+  val height = 20;
+  val speed = 2;
+  //val color = "darkblue";
+    def centerCoords(): (Double, Double) = {
+      (x+width/2.0, getY()+height/2.0)
+    }
+
+    def getY() = center + (y * height)
+
+    def draw(frame: Int): Unit = {
+      x -= speed
+      renderer.fillRect(x, getY(), width, height)
+    }
+
+    def intersect(c: (Double, Double, Double)): Boolean = {
+      val (cx,cy,cr) = c;
+      val y = getY();
+      cx >= x && cx <= x+width && cy >= y && cy <= y+height
+    }
+}
+
+class Player(var r: Double, val center: Int, val renderer: dom.CanvasRenderingContext2D) {
+  val playerCirclesGap = 35;
+  val radious = 5.0;
+  var dead = 0;
+
+  def move(dr: Double): Unit = {
+
+    r += dr * math.Pi / 180
+    r %= math.Pi*2
+  }
+
+  def coords(): ((Double, Double),(Double, Double)) = {
+    val cosR = math.cos(r) * playerCirclesGap;
+    val sinR = math.sin(r) * playerCirclesGap;
+
+    (center + cosR, center + sinR) -> (center - cosR, center - sinR)
+  }
+
+  def fullCoords(i: Int) : (Double, Double, Double) = {
+    val cosR = math.cos(r) * playerCirclesGap;
+    val sinR = math.sin(r) * playerCirclesGap;
+    if (i == 1)
+      (center + cosR, center + sinR, radious)
+    else 
+      (center - cosR, center - sinR, radious)
+  }
+
+  def draw(): Unit = {
+    val (first, second) = coords();
+    renderer.fillStyle = "gray"
+    renderer.beginPath();
+    renderer.arc(center, center, playerCirclesGap, 0, math.Pi*2, true); 
+    renderer.stroke();
+    renderer.closePath();
+
+    renderer.fillStyle = "blue"
+    renderer.beginPath();
+    renderer.arc(first._1, first._2, radious, 0, math.Pi*2, true); 
+    renderer.fill();
+    renderer.closePath();
+
+    renderer.fillStyle = "red"
+    renderer.beginPath();
+    renderer.arc(second._1, second._2, radious, 0, math.Pi*2, true); 
+    renderer.fill();
+    renderer.closePath();
+  }
+}
+
+
+
+
 @JSExport
 object ScalaJSExample {
   @JSExport
@@ -21,9 +96,11 @@ object ScalaJSExample {
     renderer.textBaseline = "middle"
 
     //variables
+    val center = (canvas.height / 2);
+    val rightBorder = canvas.width
+    val player = new Player(0, center, renderer);
     val obstacleGap = 200 // Gap between the approaching obstacles
 
-    var playerR = 0.0                 // Y velocity of the player
     // Whether the player is dead or not;
     // 0 means alive, >0 is number of frames before respawning
     var dead = 0
@@ -33,68 +110,40 @@ object ScalaJSExample {
     // List of each obstacle, storing only the Y position of the hole.
     // The X position of the obstacle is calculated by its position in the
     // queue and in the current frame.
-    val obstacles = collection.mutable.Queue.empty[Int]
-    val center = (canvas.height / 2);
+    val obstacles = collection.mutable.Queue.empty[Block]
 
     def runLive() = {
       frame += 2
 
       // Create new obstacles, or kill old ones as necessary
       if (frame >= 0 && frame % obstacleGap == 0)
-        obstacles.enqueue(Random.nextInt(5) - 2)
-      if (obstacles.length > 7){
+        obstacles.enqueue(
+          new Block(Random.nextInt(5)-2, Random.nextInt(5)-2, Random.nextInt(5)-2, center, renderer, rightBorder)
+          )
+      if (obstacles.length > 9){
         obstacles.dequeue()
         frame -= obstacleGap
       }
 
       // Render obstacles, and check for collision
       renderer.fillStyle = "darkblue"
-      for((barY, i) <- obstacles.zipWithIndex){
-        // Where each obstacle appears depends on what frame it is.
-        // This is what keeps the obstacles moving to the left as time passes.
-        val holeX = i * obstacleGap - frame + canvas.width // just movint it over time
-        val top = center + (barY * 20)
+      obstacles.foreach(_.draw(frame))
+      val death = obstacles.map(_.intersect(player.fullCoords(1))).contains(true) || 
+        obstacles.map(_.intersect(player.fullCoords(2))).contains(true)
 
-        renderer.fillRect(holeX, top, 5, 20)
-
-        // Kill the player if he hits some obstacle
-        //if (math.abs(holeX - canvas.width/2) < 5 &&
-          //math.abs(holeY - playerY) > holeSize){
-            //dead = 50
-          //}
-      }
+      if (death) dead = 50;
 
       // Render player
-      val playerCirclesGap = 50;
-      playerR %= 360
-      val cosR = Math.cos(playerR);
-      val sinR = Math.sin(playerR);
-      val first = (center + cosR * playerCirclesGap, center + sinR * playerCirclesGap);
-      val second = (center - cosR * playerCirclesGap, center - sinR * playerCirclesGap);
-      val radious = 3;
-      renderer.fillStyle = "blue"
-      renderer.beginPath();
-      renderer.arc(first._1, first._2, radious, 0, Math.PI*2, true); 
-      renderer.fill();
-      renderer.closePath();
-
-      renderer.fillStyle = "red"
-      renderer.beginPath();
-      renderer.arc(second._1, second._2, radious, 0, Math.PI*2, true); 
-      renderer.fill();
-      renderer.closePath();
+      player.draw();
     }
 
-
     def runDead() = {
-      playerR = 0
       frame = -50
       obstacles.clear()
       dead -= 1
       renderer.fillStyle = "darkred"
       renderer.fillText("Game Over", canvas.width / 2, canvas.height / 2)
     }
-
 
     def run() = {
       renderer.clearRect(0, 0, canvas.width, canvas.height)
@@ -108,10 +157,10 @@ object ScalaJSExample {
       e.keyCode match {
         case 1094 | 119=>
           //println("up")
-          playerR -= 3;
+          player.move(9.0)
         case 1099 | 115=>
           //println("down")
-          playerR += 3;
+          player.move(-9.0)
         case _ => 
           println(s"nothing: ${e.keyCode}")
       }
