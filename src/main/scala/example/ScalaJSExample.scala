@@ -5,7 +5,31 @@ import org.scalajs.dom
 import org.scalajs.dom.html
 import scala.util.Random
 
-abstract class Ateroid(val renderer: dom.CanvasRenderingContext2D) {
+abstract class Asteroid(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
+}
+
+abstract class body(
+  var x: Double = 0.0,
+  var y: Double = 0.0,
+  var r: Double = 0.0,
+  var vx: Double = 0.0,
+  var vy: Double = 0.0,
+  var vr: Double = 0.0
+  ) {
+  var sinR = math.sin(r)
+  var cosR = math.cos(r)
+
+  def frame (): Unit = {
+    // handle rotation
+    r += vr * math.Pi / 180
+    r %= math.Pi*2
+    sinR = math.sin(r)
+    cosR = math.cos(r)
+
+    // handle acceliration
+    x += vx
+    y += vy
+  }
 }
 
 class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
@@ -27,7 +51,7 @@ class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
   val width = 10
 
   // position
-  var (x, vx, y, vy, r) = (centerWidth, 0.0, centerHeight, 0.0, 0.0)
+  var (x, vx, y, vy, r) = (centerWidth.toDouble, 0.0, centerHeight.toDouble, 0.0, 0.0)
   //var points = ((0,0), (0,0), (0,0))
   var points = Array((0,0), (0,0), (0,0))
   var sinR = math.sin(r)
@@ -53,8 +77,8 @@ class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
     }
     vx += -dv*sinR
     vy += dv*cosR
-    x += vx.toInt
-    y += vy.toInt
+    x += vx
+    y += vy
 
     countPoints()
     checkOutOfBorder()
@@ -67,15 +91,24 @@ class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
     dead = !points.exists(testPoint)
   }
 
+  def die(): Unit = {
+    dead = false;
+    x = centerWidth
+    vx = 0.0
+    y = centerHeight
+    vy = 0.0
+    r = 0.0
+  }
+
   def countPoints(): Unit = {
     var w = (width * cosR / 2).toInt
     var h = (width * sinR / 2).toInt
     var yw = (height * sinR / -3).toInt
     var yh = (height * cosR / 3).toInt
 
-    points(0) = (x - w - yw, y - h - yh)
-    points(1) = (x + w - yw, y + h - yh)
-    points(2) = (x + yw * 2, y + yh * 2)
+    points(0) = (x.toInt- w - yw, y.toInt - h - yh)
+    points(1) = (x.toInt + w - yw, y.toInt + h - yh)
+    points(2) = (x.toInt + yw * 2, y.toInt + yh * 2)
   }
 
   def draw(): Unit = {
@@ -117,6 +150,7 @@ object ScalaJSExample {
     // queue and in the current frame.
     //val obstacles = collection.mutable.ArrayBuffer[Block]()
     var score = 0
+    var restart = true;
 
     def runLive() = {
       frame += 1
@@ -145,10 +179,20 @@ object ScalaJSExample {
       player.frame();
     }
 
+    def restartTimer(): Unit = {
+      restart = false
+      def tmp: Unit = {
+        player.die()
+        restart = true
+      }
+      dom.window.setTimeout(() => tmp, 2000)
+    }
     def runDead() = {
       score = 0
       frame = -50
-      player.dead = false
+      if (restart) {
+        restartTimer()
+      }
       //obstacles.clear
       renderer.fillStyle = "darkred"
       renderer.font = "50px sans-serif"
