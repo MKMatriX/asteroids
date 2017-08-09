@@ -7,13 +7,20 @@ import scala.util.Random
 
 
 abstract class body(
-  var x: Double = 0.0,
-  var y: Double = 0.0,
-  var r: Double = 0.0,
-  var vx: Double = 0.0,
-  var vy: Double = 0.0,
-  var vr: Double = 0.0
+  xInit: Double,
+  yInit: Double,
+  rInit: Double,
+  vxInit: Double,
+  vyInit: Double,
+  vrInit: Double
   ) {
+  var x = xInit
+  var y = yInit
+  var r = rInit
+  var vx = vxInit
+  var vy = vyInit
+  var vr = vrInit
+
   var sinR = math.sin(r)
   var cosR = math.cos(r)
 
@@ -25,43 +32,53 @@ abstract class body(
     cosR = math.cos(r)
 
     // handle acceliration
-    x += vx
-    y += vy
+    x += vx + 1.0
+    y += vy + 1.0
 
-    this.draw()
+    draw()
   }
 
   def draw(): Unit = {}
 }
 
 class Circle (
-    x: Double,
-    y: Double,
-    r: Double = 0.0,
-    vx: Double = 0.0,
-    vy: Double = 0.0,
-    vr: Double = 0.0,
-    radius: Double = 0.0,
-    val renderer: dom.CanvasRenderingContext2D,
-    canvas: html.Canvas
-  ) extends body (x, y, r, vx, vy, vr) {
+    xInit: Double,
+    yInit: Double,
+    rInit: Double,
+    vxInit: Double,
+    vyInit: Double,
+    vrInit: Double,
+    radius: Double,
+    var renderer: dom.CanvasRenderingContext2D,
+    var canvas: html.Canvas
+  ) extends body (xInit, yInit, rInit, vxInit, vyInit, vrInit) {
+
+  var alive = true
 
   override def draw(): Unit = {
     renderer.beginPath()
     renderer.arc(x, y, radius, 0, 2 * math.Pi, false)
-    renderer.fillStyle = "green"
+    renderer.fillStyle = "black"
     renderer.fill()
   }
-}
 
-/*
-class Asteroid extends Circle{
-  def draw(): Unit = {
+  def inField(): Boolean = {
+    x > 0 && x < canvas.width && y > 0 && y < canvas.height
   }
-  def frame(): Unit = {
+
+  def isAlive(): Boolean = alive
+
+  def collide(p: (Int,Int)): Boolean = {
+    math.pow(x-p._1,2) + math.pow(y-p._2,2) < math.pow(radius,2)
+  }
+
+  def checkBullet(bullet: Bullet): Unit = {
+    if (collide((math.floor(bullet.x).toInt, math.floor(bullet.y).toInt))) {
+      alive = false
+      bullet.alive = false
+    }
   }
 }
-*/
 
 class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
   val (centerHeight, centerWidth) = ((canvas.height / 2), (canvas.width / 2));
@@ -83,7 +100,6 @@ class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
 
   // position
   var (x, vx, y, vy, r) = (centerWidth.toDouble, 0.0, centerHeight.toDouble, 0.0, 0.0)
-  //var points = ((0,0), (0,0), (0,0))
   var points = Array((0,0), (0,0), (0,0))
   var sinR = math.sin(r)
   var cosR = math.cos(r)
@@ -92,6 +108,18 @@ class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
 
   def testPoint(p: (Int,Int)): Boolean = {
     p._1 > 0 && p._2 > 0 && p._1 < canvas.width && p._2 < canvas.height
+  }
+
+  def collide(asteroids: List[Circle]): Unit = {
+    dead |= asteroids.exists(asteroid => {
+      points.foldLeft(false)(
+        (acc: Boolean, p:(Int, Int)) => acc || asteroid.collide(p)
+      )
+    })
+
+    bullets.foreach(bullet => asteroids
+      .map(asteroid => asteroid.checkBullet(bullet))
+    )
   }
 
   def move(): Unit = {
@@ -172,7 +200,7 @@ class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
   def frame(): Unit = {
     move()
     draw()
-    bullets = bullets.filter(bullet => testPoint(bullet.x.toInt -> bullet.y.toInt))
+    bullets = bullets.filter(bullet => testPoint(bullet.x.toInt -> bullet.y.toInt)).filter(_.isAlive)
     bullets.map(_.frame())
   }
 }
@@ -188,6 +216,10 @@ class Bullet (
   ) {
   val vx = math.cos(r) * speed + parentVx
   val vy = math.sin(r) * speed + parentVy
+
+  var alive = true
+
+  def isAlive():Boolean = alive
 
   def frame (): Unit = {
     x += vx
@@ -238,36 +270,34 @@ object ScalaJSExample {
       renderer.font = "20px sans-serif"
       renderer.fillText(s"Score: $score", 100, 20)
 
-      // Create new obstacles, or kill old ones as necessary
-      //val deadObstacles = obstacles filter (_.x<=0)
-      //score += deadObstacles.length
-      //obstacles --= deadObstacles
-      if (frame >= 0 && frame % obstacleGap == 0)
+      // Create new asteroids
+      if (frame >= 0 && frame % obstacleGap == 0) {
         asteroids = asteroids :+ new Circle(
           10.0,
-          20.0,
+          10.0,
           0.0,
-          2.0,
-          3.0,
+          Random.nextDouble(),
+          Random.nextDouble(),
           0.0,
           8.0,
           renderer,
           canvas
         )
-        //obstacles += new Block(Random.nextInt(5)-2, Random.nextInt(5)-2, Random.nextInt(5)-2, center, renderer, rightBorder)
+      }
 
-
-      // Render obstacles, and check for collision
-      //renderer.fillStyle = "darkblue"
-      //obstacles.foreach(_.draw(frame))
-      //if (obstacles.map(_.intersect(player.fullCoords(1))).contains(true) || 
-        //obstacles.map(_.intersect(player.fullCoords(2))).contains(true))
-        //dead = 50;
 
       // Render player
-      player.frame();
+      player.frame()
 
-      asteroids map(_.frame())
+      player.collide(asteroids)
+
+      score += asteroids.filter(!_.isAlive()).length
+
+      // render asteroids
+      asteroids = asteroids
+          .filter(_.inField())
+          .filter(_.isAlive())
+      asteroids.map(_.frame())
     }
 
     def restartTimer(): Unit = {
@@ -284,6 +314,7 @@ object ScalaJSExample {
       if (restart) {
         restartTimer()
       }
+      asteroids = List()
       //obstacles.clear
       renderer.fillStyle = "darkred"
       renderer.font = "50px sans-serif"
