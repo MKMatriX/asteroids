@@ -32,8 +32,8 @@ abstract class body(
     cosR = math.cos(r)
 
     // handle acceliration
-    x += vx + 1.0
-    y += vy + 1.0
+    x += vx
+    y += vy
 
     draw()
   }
@@ -44,16 +44,17 @@ abstract class body(
 class Circle (
     xInit: Double,
     yInit: Double,
-    rInit: Double,
     vxInit: Double,
     vyInit: Double,
-    vrInit: Double,
-    radius: Double,
+    var radius: Int,
     var renderer: dom.CanvasRenderingContext2D,
-    var canvas: html.Canvas
+    var canvas: html.Canvas,
+    rInit: Double = 0.0,
+    vrInit: Double = 0.0
   ) extends body (xInit, yInit, rInit, vxInit, vyInit, vrInit) {
 
   var alive = true
+  val MIN_RADIUS = 4
 
   override def draw(): Unit = {
     renderer.beginPath()
@@ -74,13 +75,26 @@ class Circle (
 
   def checkBullet(bullet: Bullet): Unit = {
     if (collide((math.floor(bullet.x).toInt, math.floor(bullet.y).toInt))) {
-      alive = false
+      radius -= 3
+      if (radius <= MIN_RADIUS) {
+        alive = false
+      }
       bullet.alive = false
     }
   }
 }
 
-class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
+
+class Player (
+    var renderer: dom.CanvasRenderingContext2D,
+    var canvas: html.Canvas,
+    xInit: Double = 0.0,
+    yInit: Double = 0.0,
+    rInit: Double = 0.0,
+    vxInit: Double = 0.0,
+    vyInit: Double = 0.0,
+    vrInit: Double = 0.0
+  ) extends body (xInit, yInit, rInit, vxInit, vyInit, vrInit) {
   val (centerHeight, centerWidth) = ((canvas.height / 2), (canvas.width / 2));
 
   // status
@@ -99,10 +113,9 @@ class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
   val width = 10
 
   // position
-  var (x, vx, y, vy, r) = (centerWidth.toDouble, 0.0, centerHeight.toDouble, 0.0, 0.0)
+  x = centerWidth.toDouble
+  y = centerHeight.toDouble
   var points = Array((0,0), (0,0), (0,0))
-  var sinR = math.sin(r)
-  var cosR = math.cos(r)
 
   var bullets: List[Bullet] = List()
 
@@ -164,15 +177,16 @@ class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
   }
 
   def shoot(): Unit = {
-    val speed = 1.0
+    val speed = 3.0
     bullets = bullets :+ new Bullet(
-      renderer,
-      x,
-      y,
+      points(2)._1,
+      points(2)._2,
       (r + math.Pi/2),
-      speed,
       vx,
-      vy
+      vy,
+      0.0,
+      speed,
+      renderer
     )
   }
 
@@ -187,7 +201,7 @@ class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
     points(2) = (x.toInt + yw * 2, y.toInt + yh * 2)
   }
 
-  def draw(): Unit = {
+  override def draw(): Unit = {
     renderer.beginPath();
     renderer.moveTo(points(0)._1, points(0)._2);
     renderer.lineTo(points(1)._1, points(1)._2);
@@ -197,39 +211,43 @@ class Player(val renderer: dom.CanvasRenderingContext2D, canvas: html.Canvas) {
     renderer.fill();
   }
   
-  def frame(): Unit = {
+  override def frame(): Unit = {
     move()
     draw()
+    if (space) shoot()
     bullets = bullets.filter(bullet => testPoint(bullet.x.toInt -> bullet.y.toInt)).filter(_.isAlive)
     bullets.map(_.frame())
   }
 }
 
 class Bullet (
-  val renderer: dom.CanvasRenderingContext2D,
-  var x: Double,
-  var y: Double,
-  var r: Double,
-  var speed: Double = 1.0,
-  val parentVx: Double,
-  val parentVy: Double
-  ) {
-  val vx = math.cos(r) * speed + parentVx
-  val vy = math.sin(r) * speed + parentVy
+  xInit: Double,
+  yInit: Double,
+  rInit: Double,
+  vxInit: Double,
+  vyInit: Double,
+  vrInit: Double,
+  speed: Double = 1.0,
+  val renderer: dom.CanvasRenderingContext2D
+  ) extends body (xInit, yInit, rInit, vxInit, vyInit, vrInit) {
+
+  vx += math.cos(r) * speed
+  vy += math.sin(r) * speed
 
   var alive = true
 
   def isAlive():Boolean = alive
 
-  def frame (): Unit = {
-    x += vx
-    y += vy
-    draw()
-  }
-  def draw (): Unit = {
+  // def frame (): Unit = {
+    // x += vx
+    // y += vy
+    // draw()
+  // }
+
+  override def draw (): Unit = {
     renderer.beginPath()
-    renderer.arc(x, y, 3, 0, 2 * math.Pi, false)
-    renderer.fillStyle = "green"
+    renderer.arc(x, y, 1, 0, 2 * math.Pi, false)
+    renderer.fillStyle = "black"
     renderer.fill()
   }
 }
@@ -243,11 +261,14 @@ object ScalaJSExample {
     val renderer = canvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D]
 
     canvas.width = canvas.parentElement.clientWidth
-    canvas.height = canvas.parentElement.clientHeight
+    canvas.height = dom.window.innerHeight.toInt
+
+    val MAX_X = canvas.width
+    val MAX_Y = canvas.height
 
     //variables
     val (centerHeight, centerWidth) = ((canvas.height / 2), (canvas.width / 2));
-    val player = new Player(renderer, canvas);
+    val player = new Player(renderer, canvas)
 
     // What frame this is; used to keep track
     // of where the obstacles should be positioned
@@ -260,7 +281,11 @@ object ScalaJSExample {
     var restart = true;
 
     var asteroids:List[Circle] = List()
-    val obstacleGap = 400
+    val obstacleGap = 40
+
+    val asterodsAim = 4.0
+    val asterodsAimX = MAX_X / asterodsAim
+    val asterodsAimY = MAX_Y / asterodsAim
 
     def runLive() = {
       frame += 1
@@ -272,14 +297,40 @@ object ScalaJSExample {
 
       // Create new asteroids
       if (frame >= 0 && frame % obstacleGap == 0) {
+        var side = Random.nextInt(3)
+        var asteroidX = 0.0
+        var asteroidY = 0.0
+        side match {
+          case 0 => {
+            asteroidX = 1.0
+            asteroidY = Random.nextInt(MAX_Y).toDouble
+          }
+          case 2 => {
+            asteroidX = MAX_X - 1.0
+            asteroidY = Random.nextInt(MAX_Y).toDouble
+          }
+          case 1 => {
+            asteroidX = Random.nextInt(MAX_X).toDouble
+            asteroidY = 1.0
+          }
+          case 3 => {
+            asteroidX = Random.nextInt(MAX_Y).toDouble
+            asteroidY = MAX_Y - 1.0
+          }
+        }
+
+        var asteroidSpeed = 80 + Random.nextDouble()*200
+
+        var asteroidVX = (MAX_X/2 - asteroidX + Random.nextDouble()*asterodsAimX - asterodsAimX/2) / asteroidSpeed
+        var asteroidVY = (MAX_Y/2 - asteroidY + Random.nextDouble()*asterodsAimY - asterodsAimY/2) / asteroidSpeed
+
+
         asteroids = asteroids :+ new Circle(
-          10.0,
-          10.0,
-          0.0,
-          Random.nextDouble(),
-          Random.nextDouble(),
-          0.0,
-          8.0,
+          asteroidX,
+          asteroidY,
+          asteroidVX,
+          asteroidVY,
+          Random.nextInt(20) + 4,
           renderer,
           canvas
         )
@@ -306,9 +357,15 @@ object ScalaJSExample {
         player.die()
         restart = true
       }
-      dom.window.setTimeout(() => tmp, 2000)
+      dom.window.setTimeout(() => tmp, 3000)
     }
     def runDead() = {
+      renderer.fillStyle = "darkred"
+      renderer.font = "50px sans-serif"
+      renderer.textAlign = "center"
+      renderer.textBaseline = "middle"
+      renderer.fillText(s"Game Over score: ${score}", MAX_X / 2, MAX_Y / 2)
+
       score = 0
       frame = -50
       if (restart) {
@@ -316,11 +373,6 @@ object ScalaJSExample {
       }
       asteroids = List()
       //obstacles.clear
-      renderer.fillStyle = "darkred"
-      renderer.font = "50px sans-serif"
-      renderer.textAlign = "center"
-      renderer.textBaseline = "middle"
-      renderer.fillText("Game Over", canvas.width / 2, canvas.height / 2)
     }
 
     def run() = {
@@ -340,9 +392,9 @@ object ScalaJSExample {
         case 1094 | 119 | 83 | 40 =>
           player.down = true;
         case 1099 | 115 | 87 | 38 =>
-          player.up = true;
+          player.up = true
         case 32 =>
-          player.shoot()
+          player.space = true
         case _ => 
           println(s"nothing: ${e.keyCode}")
       }
@@ -358,7 +410,7 @@ object ScalaJSExample {
         case 1099 | 115 | 87 | 38 =>
           player.up = false;
         case 32 =>
-          null
+          player.space = false
         case _ => 
           println(s"nothing: ${e.keyCode}")
       }
