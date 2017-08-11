@@ -356,6 +356,7 @@ object ScalaJSExample {
       def tmp: Unit = {
         player.die()
         restart = true
+	score = 0
       }
       dom.window.setTimeout(() => tmp, 3000)
     }
@@ -366,7 +367,6 @@ object ScalaJSExample {
       renderer.textBaseline = "middle"
       renderer.fillText(s"Game Over score: ${score}", MAX_X / 2, MAX_Y / 2)
 
-      score = 0
       frame = -50
       if (restart) {
         restartTimer()
