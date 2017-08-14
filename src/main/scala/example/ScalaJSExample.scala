@@ -247,7 +247,7 @@ object ScalaJSExample {
     vx += math.cos(r) * speed
     vy += math.sin(r) * speed
 
-    var energy = 400
+  var energy = 1000
 
     override def frame (): Unit = {
       energy -= 1
@@ -336,8 +336,7 @@ object ScalaJSExample {
 
       // Create new asteroids
       if (frame >= 0 && frame % obstacleGap == 0) {
-        if (bodies.collect { case a: Circle => a }.length < 100)
-          addAsteroid(renderer, canvas)
+        addAsteroid(renderer, canvas)
       }
 
       val asteroids = bodies.collect { case a: Circle => a }.asInstanceOf[List[Circle]]
