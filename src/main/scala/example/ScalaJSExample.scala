@@ -53,6 +53,8 @@ object ScalaJSExample {
     }
 
     def draw(): Unit = {}
+
+    def collideBody(body: Body): Unit = {}
   }
 
   class Circle (
@@ -76,8 +78,36 @@ object ScalaJSExample {
       renderer.fill()
     }
 
+    override def collideBody(body: Body): Unit = {
+      body match {
+        case bullet:Bullet => checkBullet(bullet)
+        case asteroid:Circle => {
+          if (collideCircle(asteroid)) {
+            if (alive && asteroid.alive) {
+              new Circle(
+                x + (asteroid.x - x)/2.0,
+                y + (asteroid.y - y)/2.0,
+                vx + (asteroid.vx - vx)/2.0,
+                vy + (asteroid.vy - vy)/2.0,
+                radius + asteroid.radius,
+                renderer,
+                canvas
+              )
+              alive = false
+              asteroid.alive = false
+            }
+          }
+        }
+        case _ => {}
+      }
+    }
+
     def collide(p: (Int,Int)): Boolean = {
       math.pow(x-p._1,2) + math.pow(y-p._2,2) < math.pow(radius,2)
+    }
+
+    def collideCircle(asteroid: Circle): Boolean = {
+      math.pow(x-asteroid.x,2) + math.pow(y-asteroid.y,2) < math.pow(radius + asteroid.radius,2)
     }
 
     def checkBullet(bullet: Bullet): Unit = {
@@ -92,14 +122,14 @@ object ScalaJSExample {
           new Circle(
             x + firstDelta,y + secontDelta,
             vx * firstDelta, vy * secontDelta,
-            (radius / 1.4).toInt,
+            (radius / 2).toInt,
             renderer,
             canvas
           )
           new Circle(
             x + firstDelta,y + secontDelta,
             vx * firstDelta, vy * secontDelta,
-            (radius / 1.4).toInt,
+            (radius / 2).toInt - 1,
             renderer,
             canvas
           )
@@ -224,7 +254,7 @@ object ScalaJSExample {
       renderer.fillStyle = color
       renderer.fill();
     }
-    
+
     override def frame(): Unit = {
       move()
       if (space) shoot()
@@ -247,7 +277,7 @@ object ScalaJSExample {
     vx += math.cos(r) * speed
     vy += math.sin(r) * speed
 
-  var energy = 1000
+    var energy = 999
 
     override def frame (): Unit = {
       energy -= 1
@@ -344,9 +374,11 @@ object ScalaJSExample {
 
       player.collide(asteroids)
 
-      bullets.foreach(bullet => asteroids
-        .map(asteroid => asteroid.checkBullet(bullet))
-      )
+      // bullets.foreach(bullet => asteroids
+        // .map(asteroid => asteroid.checkBullet(bullet))
+      // )
+
+      bodies.foreach(firstBody => bodies.filter(_ != firstBody).foreach(_.collideBody(firstBody)))
 
       score += asteroids.filter(!_.isAlive()).length
 
@@ -402,7 +434,7 @@ object ScalaJSExample {
           player.up = true
         case 32 =>
           player.space = true
-        case _ => 
+        case _ =>
           println(s"nothing: ${e.keyCode}")
       }
     }
@@ -418,7 +450,7 @@ object ScalaJSExample {
           player.up = false;
         case 32 =>
           player.space = false
-        case _ => 
+        case _ =>
           println(s"nothing: ${e.keyCode}")
       }
     }
