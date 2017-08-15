@@ -98,6 +98,11 @@ object ScalaJSExample {
             }
           }
         }
+        case player:Player => {
+          if (alive) {
+            player.alive &= !player.points.exists(collide(_))
+          }
+        }
         case _ => {}
       }
     }
@@ -143,7 +148,6 @@ object ScalaJSExample {
     }
   }
 
-
   class Player (
       var renderer: dom.CanvasRenderingContext2D,
       var canvas: html.Canvas,
@@ -178,14 +182,6 @@ object ScalaJSExample {
 
     def testPoint(p: (Int,Int)): Boolean = {
       p._1 > 0 && p._2 > 0 && p._1 < MAX_X && p._2 < MAX_Y
-    }
-
-    def collide(asteroids: List[Circle]): Unit = {
-     alive &= !asteroids.exists(asteroid => {
-       points.foldLeft(false)((acc:Boolean, point: (Int, Int)) => {
-        acc || asteroid.collide(point)
-       })
-     })
     }
 
     def move(): Unit = {
@@ -371,12 +367,6 @@ object ScalaJSExample {
 
       val asteroids = bodies.collect { case a: Circle => a }.asInstanceOf[List[Circle]]
       val bullets = bodies.collect { case a: Bullet => a }.asInstanceOf[List[Bullet]]
-
-      player.collide(asteroids)
-
-      // bullets.foreach(bullet => asteroids
-        // .map(asteroid => asteroid.checkBullet(bullet))
-      // )
 
       bodies.foreach(firstBody => bodies.filter(_ != firstBody).foreach(_.collideBody(firstBody)))
 
